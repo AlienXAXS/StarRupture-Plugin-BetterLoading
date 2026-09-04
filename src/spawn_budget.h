@@ -1,6 +1,6 @@
 #pragma once
 
-// UMassSimulationSettings CDO knobs.
+// UMassSimulationSettings CDO -- the spawn time slice.
 //
 // Removing the per-frame cap in spawn_gate only converts into throughput as far
 // as the engine's own wall-clock budget allows, so the two belong together:
@@ -11,20 +11,30 @@
 //
 // The budget costs nothing while idle: ProcessPendingSpawningRequest breaks out
 // immediately when the request queue is empty, so a raised slice is only spent
-// when there is actually something waiting to spawn.
+// when there is actually something waiting to spawn. It is charged per spawner
+// subsystem rather than globally -- neither UCrMassActorSpawnerSubsystem nor
+// UCrMassBuildingSpawnerSubsystem overrides Initialize, so each registers its
+// own PrePhysics callback and each gets the whole slice.
 
-// Look up the CDO and record the engine's own defaults. Idempotent; returns
-// false until the CDO is reachable.
+// Look up the CDO and record the engine's own values. Idempotent; returns false
+// until the CDO is reachable.
 bool EnsureBudgetCaptured();
 
-// Push the configured values into the CDO. No-op when the CDO is not captured.
-void ApplyBudgetFromConfig();
+// Write the spawn time slice, in seconds. No-op when the CDO is not captured or
+// when the value is already what is being asked for.
+void ApplySpawnSlice(double seconds);
 
-// Put the engine's defaults back.
+// Put the engine's own value back.
 void RestoreBudgetDefaults();
 
 bool   IsBudgetCaptured();
 double GetSpawnSliceSeconds();        // live CDO value
 double GetDefaultSpawnSliceSeconds(); // what the engine shipped with
-float  GetRetrySeconds();
-float  GetDefaultRetrySeconds();
+
+// Read-only. The game ships 5.0 s here against stock Unreal's 0.5, which is
+// worth seeing when diagnosing a slow load -- but it only affects spawns that
+// return Failed, which this spawner should not produce (it sets
+// SpawnCollisionHandlingOverride = AlwaysSpawn), and
+// UMassRepresentationSubsystem::Initialize caches it per world anyway.
+// Reported, never written.
+float GetRetrySeconds();

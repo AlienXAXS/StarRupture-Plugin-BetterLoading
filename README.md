@@ -56,44 +56,60 @@ Both changes are reverted on plugin shutdown or reload.
 | Section | Key | Default | Meaning |
 |---|---|---|---|
 | `General` | `Enabled` | `true` | Master switch. |
-| `Spawning` | `RemovePerFrameLimit` | `true` | The byte patch. This is the main fix. |
-| `Spawning` | `SpawnTimeSliceMs` | `4.0` | Milliseconds per frame for Mass actor spawning. Game ships 1.5. `0` = leave the game's value alone. |
-| `Advanced` | `FailedSpawnRetrySeconds` | `0` | Retry delay for a spawn that genuinely failed. Game ships 5.0 (ten times stock Unreal). `0` = leave alone. |
 
-Setting either numeric knob to `0` is how you isolate one fix from the other while testing.
+That is the whole file, on purpose. Installing BetterLoading *is* the decision — a plugin that has to be tuned
+before it does the thing it is named after has moved its own job onto the user. With `Enabled` on you get the
+cap removed and a 4 ms spawn budget, and there is nothing else to set.
 
-`FailedSpawnRetrySeconds` only reaches worlds loaded *after* the change — `UMassRepresentationSubsystem::Initialize`
-caches it into `RetryTimeInterval` when the world's subsystem is created. It is off by default because it only
-matters for spawns that return `Failed`, which the building spawner should not produce: it sets
-`SpawnCollisionHandlingOverride = AlwaysSpawn`.
+The slice and the cap patch used to be config entries with sliders. They were dropped because a value someone
+typed during one test and left in an ini is a permanent, invisible frame-time cost with nothing on screen to
+explain it — the same reason the loader refuses to persist per-plugin log levels. Both survive as
+**session-only** console overrides, which is where a debugging tool belongs: per-run, and visible in the thing
+that caused it.
 
-On client builds the config UI applies changes live. Both numeric knobs and the cap patch also take effect
-immediately from the console.
+On client builds the config UI applies `Enabled` live, with no reload.
 
 ## Console
 
 Registered in both console front-ends, which on a dedicated server is the only way to reach any of this.
+Nothing here is saved; every override is gone on reload or restart.
 
 ```
 betterloading                      # same as: betterloading status
-betterloading slice 8              # set the spawn time slice, in milliseconds
-betterloading slice default        # back to the game's 1.5 ms
-betterloading limit off            # remove the one-per-frame cap (the default)
-betterloading limit on             # put the game's cap back, for an A/B test
+betterloading cap keep             # leave the game's one-per-frame cap in force
+betterloading cap remove           # take it out (what the plugin does by default)
+betterloading slice 8              # spawn time slice, in milliseconds
+betterloading slice default        # back to the plugin's 4 ms
 ```
 
-`status` prints the resolved gate address, whether the patch is applied, and the live vs. shipped values of
-both CDO fields.
+`status` prints the resolved gate address, whether the patch is applied, the live vs. shipped spawn slice, and
+the game's failed-spawn retry interval (reported only — see below).
 
-## Tuning
+## If it misbehaves
 
-Start with the defaults. If load-in is still slower than you want, raise `SpawnTimeSliceMs` — 8 to 10 ms is
-aggressive but the cost is only paid while there is a spawn backlog.
+`betterloading cap keep` restores stock behaviour instantly, without unloading anything. That is the first
+thing to try if something looks wrong, and it is the whole reason the override exists.
 
-If removing the cap turns the trickle into a *hitch* rather than making it fast, that is worth knowing and
-worth reporting: the likely culprit is `UCrBuildingStabilitySubsystem::AddPendingSpawner` being non-linear in
-the number of spawners, which would be the real reason the cap exists. Back the time slice down rather than
-putting the cap back, and the two together give you a dial between "slow and smooth" and "fast and choppy".
+The useful three-way comparison on your own save:
+
+| | Cap | Slice |
+|---|---|---|
+| Stock | `cap keep` | `slice default` |
+| Cap removal alone | `cap remove` | `slice 1.5` |
+| Shipping default | `cap remove` | `slice default` (4 ms) |
+
+If removing the cap turns the trickle into a *hitch* rather than making it fast, that is worth reporting: the
+likely culprit is `UCrBuildingStabilitySubsystem::AddPendingSpawner` being non-linear in the number of
+spawners, which would be the real reason the cap exists. Drop the slice rather than putting the cap back — the
+two together are a dial between "slow and smooth" and "fast and choppy".
+
+### What the plugin deliberately does not touch
+
+`DesiredActorFailedSpawningRetryTimeInterval` ships at 5.0 s against stock Unreal's 0.5. It is reported by
+`status` because it is worth seeing while diagnosing, but never written: it only affects spawns that return
+`Failed`, which this spawner should not produce (it sets `SpawnCollisionHandlingOverride = AlwaysSpawn`), and
+`UMassRepresentationSubsystem::Initialize` caches it per world anyway, so writing it mid-session would do
+nothing until the next load.
 
 ## Compatibility
 

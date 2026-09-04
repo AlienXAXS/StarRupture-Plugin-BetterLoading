@@ -10,6 +10,11 @@
 
 static constexpr const char* kCommandName = "betterloading";
 
+// Upper bound on the session override. Two frames' worth at 60 fps is already
+// far past anything defensible; the point is to catch a typo, not to express a
+// policy.
+static constexpr float kMaxSliceMs = 33.0f;
+
 static bool StrEqualI(const char* a, const char* b)
 {
     return a && b && _stricmp(a, b) == 0;
@@ -28,7 +33,7 @@ static void PrintStatus(IPluginConsole* console, PluginConsoleSink sink)
     {
         console->Printf(sink, PluginConsoleLineKind::Output,
                         "  per-frame cap      : %s (gate at 0x%llX)",
-                        IsSpawnGatePatched() ? "removed" : "in place",
+                        IsSpawnGatePatched() ? "removed" : "in force",
                         static_cast<unsigned long long>(gate));
     }
     else
@@ -40,17 +45,24 @@ static void PrintStatus(IPluginConsole* console, PluginConsoleSink sink)
     if (IsBudgetCaptured())
     {
         console->Printf(sink, PluginConsoleLineKind::Output,
-                        "  spawn time slice   : %.2f ms  (game default %.2f ms)",
+                        "  spawn time slice   : %.2f ms  (game ships %.2f ms)",
                         GetSpawnSliceSeconds() * 1000.0,
                         GetDefaultSpawnSliceSeconds() * 1000.0);
         console->Printf(sink, PluginConsoleLineKind::Output,
-                        "  failed-spawn retry : %.2f s   (game default %.2f s)",
-                        GetRetrySeconds(), GetDefaultRetrySeconds());
+                        "  failed-spawn retry : %.2f s   (game value, not changed)",
+                        GetRetrySeconds());
     }
     else
     {
         console->Write(sink, PluginConsoleLineKind::Error,
                        "  spawn time slice   : UMassSimulationSettings CDO not reachable");
+    }
+
+    const bool overridden = (GetSliceOverrideMs() > 0.0f) || GetKeepGameCap();
+    if (overridden)
+    {
+        console->Write(sink, PluginConsoleLineKind::Notice,
+                       "  session overrides active -- not saved, gone on reload or restart");
     }
 }
 
@@ -77,51 +89,53 @@ static void HandleCommand(const char* const* argv, int argc, PluginConsoleSink s
             return;
         }
 
-        // "default" is written to the ini as 0, which ApplyBudgetFromConfig
-        // reads as "put the engine's own value back".
-        float ms = 0.0f;
+        float ms = kNoSliceOverride;
         if (!StrEqualI(argv[2], "default"))
         {
             ms = static_cast<float>(std::atof(argv[2]));
-            if (ms <= 0.0f || ms > 33.0f)
+            if (ms <= 0.0f || ms > kMaxSliceMs)
             {
-                console->Write(sink, PluginConsoleLineKind::Error,
-                               "slice must be between 0 and 33 ms, or 'default'");
+                console->Printf(sink, PluginConsoleLineKind::Error,
+                                "slice must be between 0 and %.0f ms, or 'default'", kMaxSliceMs);
                 return;
             }
         }
 
-        LoadingConfig::Config::WriteSpawnTimeSliceMs(ms);
-        ApplyStateFromConfig();
+        SetSliceOverrideMs(ms);
 
         console->Printf(sink, PluginConsoleLineKind::Output,
                         "spawn time slice now %.2f ms", GetSpawnSliceSeconds() * 1000.0);
+        console->Write(sink, PluginConsoleLineKind::Notice,
+                       "session only -- not saved to the ini");
         return;
     }
 
-    if (StrEqualI(argv[1], "limit"))
+    if (StrEqualI(argv[1], "cap"))
     {
-        if (argc < 3 || (!StrEqualI(argv[2], "on") && !StrEqualI(argv[2], "off")))
+        if (argc < 3 || (!StrEqualI(argv[2], "keep") && !StrEqualI(argv[2], "remove")))
         {
             console->Write(sink, PluginConsoleLineKind::Error,
-                           "usage: betterloading limit <on|off>   (on = the game's one-per-frame cap)");
+                           "usage: betterloading cap <keep|remove>");
+            console->Write(sink, PluginConsoleLineKind::Notice,
+                           "  keep   = leave the game's one-per-frame cap in force (stock behaviour)");
+            console->Write(sink, PluginConsoleLineKind::Notice,
+                           "  remove = take it out (what the plugin does by default)");
             return;
         }
 
-        // "on" means the game's cap is in force, i.e. our patch is off.
-        const bool capOn = StrEqualI(argv[2], "on");
-        LoadingConfig::Config::WriteRemovePerFrameLimit(!capOn);
-        ApplyStateFromConfig();
+        SetKeepGameCap(StrEqualI(argv[2], "keep"));
 
         console->Printf(sink, PluginConsoleLineKind::Output,
                         "per-frame building spawn cap is now %s",
-                        IsSpawnGatePatched() ? "removed" : "in place");
+                        IsSpawnGatePatched() ? "removed" : "in force");
+        console->Write(sink, PluginConsoleLineKind::Notice,
+                       "session only -- not saved to the ini");
         return;
     }
 
     console->Printf(sink, PluginConsoleLineKind::Error, "unknown subcommand '%s'", argv[1]);
     console->Write(sink, PluginConsoleLineKind::Notice,
-                   "betterloading [status] | slice <ms|default> | limit <on|off>");
+                   "betterloading [status] | slice <ms|default> | cap <keep|remove>");
 }
 
 void RegisterLoadingConsoleCommand(IPluginSelf* self)
@@ -132,8 +146,8 @@ void RegisterLoadingConsoleCommand(IPluginSelf* self)
     PluginConsoleCommandDesc desc = {};
     desc.name       = kCommandName;
     desc.aliases    = nullptr;
-    desc.usage      = "betterloading [status] | slice <ms|default> | limit <on|off>";
-    desc.help       = "Inspect and tune building spawn-in rate after a level load.";
+    desc.usage      = "betterloading [status] | slice <ms|default> | cap <keep|remove>";
+    desc.help       = "Inspect building spawn-in behaviour, and override it for this session.";
     desc.handler    = &HandleCommand;
     desc.userData   = nullptr;
     // Touches the UMassSimulationSettings CDO and patches game code, so it has
