@@ -1,0 +1,6 @@
+LIBRARY BetterLoading
+EXPORTS
+    GetPluginInfo
+    OnPluginLoadHooks
+    PluginInit
+    PluginShutdown
