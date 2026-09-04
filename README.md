@@ -47,7 +47,37 @@ together. The default here is 4 ms.
 The budget costs nothing while idle: `ProcessPendingSpawningRequest` breaks out immediately when the request
 queue is empty, so a raised slice is only ever spent when something is actually waiting to spawn.
 
-Both changes are reverted on plugin shutdown or reload.
+**3. Raises the rail/belt budget, which is a completely separate thing.** Spline-based buildings do not come
+through Mass actor spawning at all. They are paced by
+`UCrSplineBasedBuildingsSpawnerSubsystemSettings::TimeBudgetForSpawningSplineMeshComponentsPerFrame`, with its
+own per-frame budget, its own maximum, and what looks like a ramp between the two. That is why rails are the
+last thing to finish appearing after a load no matter what the Mass slice is set to. The plugin scales it by
+4x rather than setting a value, because the shipped numbers are only discovered at runtime — see below.
+
+All three changes are reverted on plugin shutdown or reload.
+
+## Why the spawn-in still is not a neat spiral
+
+Mass *does* order spawn requests by distance. `GetNextRequestToSpawn` picks the lowest
+`FMassActorSpawnRequest::Priority`, and `UMassRepresentationActorManagement::GetSpawnPriority` returns
+`LODSignificance - (on screen ? 1.0 : 0.0)`, refreshed every tick for any request still queued.
+
+But that ordering is **per queue**, and there is more than one queue. Each representation subsystem owns its
+own spawner subsystem with its own request array, its own 1.5 ms budget and — for buildings — its own copy of
+the per-frame cap (`LastSpawnFrame` is an instance field):
+
+| Representation subsystem | Spawner it uses |
+|---|---|
+| `UCrMassBuildingRepresentationSubsystem` | `UCrMassBuildingSpawnerSubsystem` (has the cap) |
+| `UCrMassFoundableRepresentationSubsystem` | base `UMassActorSpawnerSubsystem` |
+| `UCrLogisticsAgentRepresentationSubsystem` | `UCrMassActorSpawnerSubsystem` |
+| `UCrMassRepresentationSubsystem`, enemies, crowd | base / `UMassCrowdSpawnerSubsystem` |
+| spline-based buildings (rails, belts) | not Mass actor spawning at all |
+
+Nothing orders *across* those queues. Several of them drain at once, each internally nearest-first, and the
+result on screen is interleaved from several independent spatial orderings — plus rails on a different
+mechanism entirely. That reads as "things appear all over the place", and it is expected rather than a bug in
+the ordering.
 
 ## Configuration
 
@@ -80,10 +110,18 @@ betterloading cap keep             # leave the game's one-per-frame cap in force
 betterloading cap remove           # take it out (what the plugin does by default)
 betterloading slice 8              # spawn time slice, in milliseconds
 betterloading slice default        # back to the plugin's 4 ms
+betterloading rails 8              # scale the rail/belt spline-mesh budget
+betterloading rails default        # back to the plugin's 4x
 ```
 
-`status` prints the resolved gate address, whether the patch is applied, the live vs. shipped spawn slice, and
-the game's failed-spawn retry interval (reported only — see below).
+`status` prints the resolved gate address, whether the patch is applied, the live vs. shipped spawn slice, the
+live vs. shipped rail/belt budget, and the game's failed-spawn retry interval (reported only — see below).
+
+**The rail numbers are worth reading the first time you run this.** Nobody has seen the shipped values for
+`TimeBudgetForSpawningSplineMeshComponentsPerFrame` yet — they are read off the CDO and written to
+`modloader.log` at INFO on the first capture. That log line is what tells us whether 4x is sensible or wildly
+off, and whether the `Start`/`End` ramp fields need touching too. They are currently left alone because the
+reading of them as a ramp is unverified.
 
 ## If it misbehaves
 
@@ -163,6 +201,7 @@ Output lands at `build/<Configuration>/Plugins/BetterLoading.dll`.
 | [`src/plugin.cpp`](src/plugin.cpp) | `GetPluginInfo` / `OnPluginLoadHooks` / `PluginInit` / `PluginShutdown` |
 | [`src/spawn_gate.cpp`](src/spawn_gate.cpp) | The AOB and the two-byte patch, with the disassembly it is derived from |
 | [`src/spawn_budget.cpp`](src/spawn_budget.cpp) | `UMassSimulationSettings` CDO knobs |
+| [`src/spline_budget.cpp`](src/spline_budget.cpp) | `UCrSplineBasedBuildingsSpawnerSubsystemSettings` — the rail/belt budget |
 | [`src/loading_apply.cpp`](src/loading_apply.cpp) | Single place that turns config into applied state |
 | [`src/loading_config.cpp`](src/loading_config.cpp) | Config schema and typed accessors |
 | [`src/loading_console.cpp`](src/loading_console.cpp) | The `betterloading` command |

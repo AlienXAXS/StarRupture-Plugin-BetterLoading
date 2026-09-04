@@ -3,6 +3,7 @@
 #include "loading_config.h"
 #include "spawn_budget.h"
 #include "spawn_gate.h"
+#include "spline_budget.h"
 #include "plugin_helpers.h"
 #include <plugin_interface.h>
 #include <cstdlib>
@@ -14,6 +15,10 @@ static constexpr const char* kCommandName = "betterloading";
 // far past anything defensible; the point is to catch a typo, not to express a
 // policy.
 static constexpr float kMaxSliceMs = 33.0f;
+
+// Same idea for the rail multiplier: a bound that catches a fat-fingered
+// number, not a considered limit.
+static constexpr float kMaxRailMultiplier = 50.0f;
 
 static bool StrEqualI(const char* a, const char* b)
 {
@@ -58,7 +63,31 @@ static void PrintStatus(IPluginConsole* console, PluginConsoleSink sink)
                        "  spawn time slice   : UMassSimulationSettings CDO not reachable");
     }
 
-    const bool overridden = (GetSliceOverrideMs() > 0.0f) || GetKeepGameCap();
+    // Rails and belts are a separate subsystem on a separate budget -- this is
+    // the line that explains why they finish last no matter what the Mass slice
+    // is set to.
+    if (IsSplineBudgetCaptured())
+    {
+        console->Printf(sink, PluginConsoleLineKind::Output,
+                        "  rail/belt budget   : %.6f per frame  (game ships %.6f, x%.2f)",
+                        GetSplinePerFrameBudget(),
+                        GetDefaultSplinePerFrameBudget(),
+                        GetEffectiveRailMultiplier());
+        console->Printf(sink, PluginConsoleLineKind::Output,
+                        "  rail/belt max      : %.6f  (game ships %.6f), ramp %.4f -> %.4f s",
+                        GetSplineMaxBudget(),
+                        GetDefaultSplineMaxBudget(),
+                        GetSplineRampStartSeconds(),
+                        GetSplineRampEndSeconds());
+    }
+    else
+    {
+        console->Write(sink, PluginConsoleLineKind::Error,
+                       "  rail/belt budget   : CrSplineBasedBuildingsSpawnerSubsystemSettings CDO not reachable");
+    }
+
+    const bool overridden = (GetSliceOverrideMs() > 0.0f) || GetKeepGameCap()
+                         || (GetRailMultiplierOverride() > 0.0f);
     if (overridden)
     {
         console->Write(sink, PluginConsoleLineKind::Notice,
@@ -133,9 +162,44 @@ static void HandleCommand(const char* const* argv, int argc, PluginConsoleSink s
         return;
     }
 
+    if (StrEqualI(argv[1], "rails"))
+    {
+        if (argc < 3)
+        {
+            console->Write(sink, PluginConsoleLineKind::Error,
+                           "usage: betterloading rails <multiplier|default>");
+            console->Write(sink, PluginConsoleLineKind::Notice,
+                           "  scales the spline-mesh budget rails and belts are paced by -- "
+                           "a different subsystem from everything else");
+            return;
+        }
+
+        float mult = kNoRailOverride;
+        if (!StrEqualI(argv[2], "default"))
+        {
+            mult = static_cast<float>(std::atof(argv[2]));
+            if (mult <= 0.0f || mult > kMaxRailMultiplier)
+            {
+                console->Printf(sink, PluginConsoleLineKind::Error,
+                                "multiplier must be between 0 and %.0f, or 'default'",
+                                kMaxRailMultiplier);
+                return;
+            }
+        }
+
+        SetRailMultiplier(mult);
+
+        console->Printf(sink, PluginConsoleLineKind::Output,
+                        "rail/belt budget now x%.2f (%.6f per frame)",
+                        GetEffectiveRailMultiplier(), GetSplinePerFrameBudget());
+        console->Write(sink, PluginConsoleLineKind::Notice,
+                       "session only -- not saved to the ini");
+        return;
+    }
+
     console->Printf(sink, PluginConsoleLineKind::Error, "unknown subcommand '%s'", argv[1]);
     console->Write(sink, PluginConsoleLineKind::Notice,
-                   "betterloading [status] | slice <ms|default> | cap <keep|remove>");
+                   "betterloading [status] | slice <ms|default> | cap <keep|remove> | rails <mult|default>");
 }
 
 void RegisterLoadingConsoleCommand(IPluginSelf* self)
@@ -146,7 +210,7 @@ void RegisterLoadingConsoleCommand(IPluginSelf* self)
     PluginConsoleCommandDesc desc = {};
     desc.name       = kCommandName;
     desc.aliases    = nullptr;
-    desc.usage      = "betterloading [status] | slice <ms|default> | cap <keep|remove>";
+    desc.usage      = "betterloading [status] | slice <ms|default> | cap <keep|remove> | rails <mult|default>";
     desc.help       = "Inspect building spawn-in behaviour, and override it for this session.";
     desc.handler    = &HandleCommand;
     desc.userData   = nullptr;

@@ -13,6 +13,11 @@
 // What the plugin does when nobody has overridden anything.
 inline constexpr float kDefaultSliceMs = 4.0f;
 
+// Rails and belts are paced by a different subsystem with its own budget, so
+// they need their own number. Scaled rather than set, because the game's own
+// values are only discovered at runtime -- see spline_budget.h.
+inline constexpr float kDefaultRailMultiplier = 4.0f;
+
 // Idempotent. Safe to call as often as you like.
 void ApplyStateFromConfig();
 
@@ -28,3 +33,9 @@ float GetEffectiveSliceMs();        // what is actually applied
 
 void SetKeepGameCap(bool keep);     // true = leave the game's own cap in force
 bool GetKeepGameCap();
+
+inline constexpr float kNoRailOverride = -1.0f;
+
+void  SetRailMultiplier(float multiplier); // kNoRailOverride clears the override
+float GetRailMultiplierOverride();         // kNoRailOverride when unset
+float GetEffectiveRailMultiplier();

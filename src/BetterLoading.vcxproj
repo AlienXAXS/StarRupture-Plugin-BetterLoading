@@ -172,6 +172,7 @@
     <ClInclude Include="loading_console.h" />
     <ClInclude Include="spawn_budget.h" />
     <ClInclude Include="spawn_gate.h" />
+    <ClInclude Include="spline_budget.h" />
   </ItemGroup>
   <ItemGroup>
     <!-- Game SDK sources - add more <Module>_functions.cpp entries as you use them -->
@@ -185,6 +186,7 @@
     <ClCompile Include="loading_console.cpp" />
     <ClCompile Include="spawn_budget.cpp" />
     <ClCompile Include="spawn_gate.cpp" />
+    <ClCompile Include="spline_budget.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BetterLoading.def" />

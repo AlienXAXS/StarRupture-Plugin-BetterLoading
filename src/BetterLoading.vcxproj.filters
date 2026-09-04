@@ -39,6 +39,9 @@
     <ClCompile Include="spawn_gate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="spline_budget.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(StarRuptureSDKSourceDir)Basic.cpp">
       <Filter>Source Files\GameSDK</Filter>
     </ClCompile>
@@ -69,6 +72,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="spawn_gate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spline_budget.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(PluginSDKInclude)\plugin_interface.h">
