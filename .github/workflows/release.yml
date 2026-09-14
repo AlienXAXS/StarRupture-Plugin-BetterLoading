@@ -132,18 +132,6 @@ jobs:
             /m `
             /v:minimal
 
-      - name: Build Server Release
-        run: |
-          msbuild "BetterLoading.sln" `
-            /p:Configuration="Server Release" `
-            /p:Platform=x64 `
-            /p:PostBuildEventUseInBuild=false `
-            /p:ModLoaderBuildTag="${{ steps.tag.outputs.TAG }}" `
-            /p:GameSDKRoot="${{ github.workspace }}\game-sdk" `
-            /p:PluginSDKInclude="${{ github.workspace }}\plugin-sdk\include" `
-            /m `
-            /v:minimal
-
       - name: Generate release assets
         shell: pwsh
         run: |
