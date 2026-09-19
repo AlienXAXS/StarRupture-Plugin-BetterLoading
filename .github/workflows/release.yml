@@ -151,7 +151,7 @@ jobs:
           $ifaceMax = [int]$matchMax.Groups[1].Value
           Write-Host "Interface version range: [$ifaceMin, $ifaceMax]"
 
-          foreach ($variant in @("Client", "Server")) {
+          foreach ($variant in @("Client")) {
             $varLower = $variant.ToLower()
 
             # Individual DLL (output filename uses dllName, release asset uses name)
@@ -200,10 +200,7 @@ jobs:
           $assets = @(
             "$ws\$name-Client.dll",
             "$ws\$name-client-manifest.json",
-            "$ws\$name-Client-$tag.zip",
-            "$ws\$name-Server.dll",
-            "$ws\$name-server-manifest.json",
-            "$ws\$name-Server-$tag.zip"
+            "$ws\$name-Client-$tag.zip"
           )
 
           Write-Host "Uploading $($assets.Count) asset(s):"
@@ -225,14 +222,14 @@ jobs:
           description: "Changelog: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.TAG }}"
           version: ${{ steps.tag.outputs.NEXUS_VERSION }}
 
-      - name: Upload Server build to Nexus Mods
+      - name: Upload Client build to Nexus Mods
         uses: Nexus-Mods/upload-action@main
         with:
           api_key: ${{ secrets.NEXUS_APIKEY }}
-          file_id: ${{ secrets.NEXUS_SERVER_GROUP_ID }}
-          filename: ${{ github.workspace }}\BetterLoading-Server-${{ steps.tag.outputs.TAG }}.zip
+          file_id: ${{ secrets.NEXUS_CLIENT_GROUP_ID }}
+          filename: ${{ github.workspace }}\BetterLoading-Client-${{ steps.tag.outputs.TAG }}.zip
           archive_existing_version: true
           allow_mod_manager_download: false
-          display_name: "BetterLoading Server ${{ steps.tag.outputs.TAG }}"
+          display_name: "BetterLoading Client ${{ steps.tag.outputs.TAG }}"
           description: "Changelog: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.TAG }}"
           version: ${{ steps.tag.outputs.NEXUS_VERSION }}
