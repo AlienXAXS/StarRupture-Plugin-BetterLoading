@@ -11,8 +11,9 @@
 // UCrMassBuildingRepresentationSubsystem::Initialize points its
 // ActorSpawnerSubsystem at UCrMassBuildingSpawnerSubsystem, and the stock
 // UMassActorSpawnerSubsystem::SpawnOrRetrieveFromPool calls the virtual
-// SpawnActor whenever the actor pool has nothing to hand back. The override
-// opens with:
+// SpawnActor whenever the actor pool has nothing to hand back. Past its
+// register-saving prologue -- 0x1F bytes of it on the shipped build -- the
+// override reads:
 //
 //     mov  rax, cs:GFrameCounter
 //     mov  r15, r8
@@ -63,16 +64,23 @@ void ResolveSpawnGate(IPluginSelf* self, IPluginHookScanner* scanner)
     if (!self || !scanner)
         return;
 
-    // FUNCTION_START: the pattern is anchored on SpawnActor's first instruction
-    // (mov rax, cs:GFrameCounter), so the loader can check the match against the
-    // exception directory and confirm a function really does begin there. The
-    // jcc we patch is reached by offset from that entry, below -- declaring the
-    // entry is the stronger check of the two, because it is what makes the
-    // offset arithmetic mean anything.
+    // IN_FUNCTION, not FUNCTION_START. Nothing is detoured here -- the match is
+    // an anchor for a two-byte store at +0x17 -- and the pattern begins at the
+    // `mov rax, cs:GFrameCounter` that follows SpawnActor's prologue, 0x1F bytes
+    // past the entry. Declaring FUNCTION_START was wrong and the loader said so:
+    //
+    //     declared as 'function start', but it is not.
+    //     this is 0x1F bytes INSIDE a function that starts at 0x7FF783A4DA60
+    //
+    // Offsetting back to the entry would only move the problem: kJnzOffset is
+    // measured from the match, so the entry would then need its own 0x1F added
+    // back. IN_FUNCTION checks what actually matters for a byte patch -- that
+    // the address has unwind info, so it is inside real compiled code rather
+    // than in a data blob that happened to hold these bytes.
     PluginScanRequest req = PLUGIN_SCAN_REQUEST_INIT;
     req.hookName = kHookName;
     req.pattern  = kSpawnGatePattern;
-    req.kind     = PLUGIN_SCAN_FUNCTION_START;
+    req.kind     = PLUGIN_SCAN_IN_FUNCTION;
 
     const uintptr_t match = scanner->Resolve(self, &req);
     if (!match)
