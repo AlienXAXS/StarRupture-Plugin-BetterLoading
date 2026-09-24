@@ -63,9 +63,20 @@ void ResolveSpawnGate(IPluginSelf* self, IPluginHookScanner* scanner)
     if (!self || !scanner)
         return;
 
-    const uintptr_t match = scanner->ResolveRequired(self, kHookName, kSpawnGatePattern);
+    // FUNCTION_START: the pattern is anchored on SpawnActor's first instruction
+    // (mov rax, cs:GFrameCounter), so the loader can check the match against the
+    // exception directory and confirm a function really does begin there. The
+    // jcc we patch is reached by offset from that entry, below -- declaring the
+    // entry is the stronger check of the two, because it is what makes the
+    // offset arithmetic mean anything.
+    PluginScanRequest req = PLUGIN_SCAN_REQUEST_INIT;
+    req.hookName = kHookName;
+    req.pattern  = kSpawnGatePattern;
+    req.kind     = PLUGIN_SCAN_FUNCTION_START;
+
+    const uintptr_t match = scanner->Resolve(self, &req);
     if (!match)
-        return; // ResolveRequired recorded the miss; the loader refuses the plugin.
+        return; // Resolve recorded the miss; the loader refuses the plugin.
 
     // The pattern already pins these two bytes, so a mismatch here means the
     // offset arithmetic is wrong rather than the game having changed. Say so
