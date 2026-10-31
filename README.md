@@ -1,5 +1,7 @@
 # BetterLoading
 
+> **Deprecated.** StarRupture now covers what this plugin did, so it is no longer maintained and does not load on the current game build. The source stays here for reference.
+
 A [StarRupture ModLoader](https://github.com/AlienXAXS/StarRupture-ModLoader) plugin that stops your base
 trickling in one building at a time after a level load.
 
