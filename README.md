@@ -167,21 +167,27 @@ recording the address.
 ## Requirements
 
 - Visual Studio 2022 (MSVC v143, C++20)
-- [StarRupture-Plugin-SDK](https://github.com/AlienXAXS/StarRupture-Plugin-SDK) (with its `StarRupture SDK` submodule initialized) (interface v63)
+- [StarRupture-Plugin-SDK](https://github.com/AlienXAXS/StarRupture-Plugin-SDK) (interface v63)
 - StarRupture with ModLoader installed
 
-The Plugin SDK is consumed from a **sibling checkout**:
+## Building
+
+Put the plugin next to `StarRupture-Plugin-SDK` and clone both with `--recursive`, so the game SDK submodules come along:
+
+```
+git clone --recursive https://github.com/AlienXAXS/StarRupture-Plugin-SDK.git
+git clone --recursive https://github.com/AlienXAXS/StarRupture-Plugin-BetterLoading.git
+```
 
 ```
 <parent folder>/
 ├── StarRupture-Plugin-SDK/
-└── StarRupture-Plugin-BetterLoading/   <- this repo
+└── StarRupture-Plugin-BetterLoading/
 ```
 
-Adjust [`Shared.props`](Shared.props) if your layout differs, or override with
-`/p:GameSDKRoot=... /p:PluginSDKInclude=...`.
+The game SDK comes from this plugin's own `StarRupture SDK` submodule when it has one, otherwise from the Plugin SDK's. To build against other folders, pass `/p:PluginSDKInclude=...` and `/p:GameSDKRoot=...` to msbuild.
 
-## Building
+Then build:
 
 ```bat
 msbuild BetterLoading.sln /p:Configuration="Client Release" /p:Platform=x64
