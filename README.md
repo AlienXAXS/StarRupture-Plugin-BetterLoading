@@ -167,15 +167,13 @@ recording the address.
 ## Requirements
 
 - Visual Studio 2022 (MSVC v143, C++20)
-- [StarRupture-Game-SDK](https://github.com/AlienXAXS/StarRupture-Game-SDK)
-- [StarRupture-Plugin-SDK](https://github.com/AlienXAXS/StarRupture-Plugin-SDK) (interface v63)
+- [StarRupture-Plugin-SDK](https://github.com/AlienXAXS/StarRupture-Plugin-SDK) (with its `StarRupture SDK` submodule initialized) (interface v63)
 - StarRupture with ModLoader installed
 
-Both SDKs are consumed from **sibling checkouts**:
+The Plugin SDK is consumed from a **sibling checkout**:
 
 ```
-GitHub/
-├── StarRupture-Game-SDK/
+<parent folder>/
 ├── StarRupture-Plugin-SDK/
 └── StarRupture-Plugin-BetterLoading/   <- this repo
 ```
